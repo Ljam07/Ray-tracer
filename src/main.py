@@ -29,26 +29,39 @@ def scene_intersect(orig, dir, spheres):
 
 
 def cast_ray(orig, dir, spheres, lights):
+    # Find intersection with the scene
     hit, normal, material, color = scene_intersect(orig, dir, spheres)
 
-    if hit is None:
+    if hit is None:  # No intersection, return background colour
         return glm.vec3(0.2, 0.7, 0.8)
 
     diffuse_intensity = 0
     specular_light_intensity = 0
 
     for light in lights:
-        light_dir = glm.normalize(light.position - hit)
-        diffuse_intensity += light.intensity * max(0, glm.dot(normal, light_dir))
-        
-        reflection = reflect(-light_dir, normal)
-        specular_light_intensity += pow(max(0, glm.dot(reflection, -dir)), material.specular_exponent) * light.intensity
+        light_dir = glm.normalize(light.position - hit)  
+        light_distance = glm.length(light.position - hit) 
 
+        # Calculate shadow ray origin, slightly offset to prevent self-shadowing
+        shadow_orig = hit + normal * 1e-3 if glm.dot(light_dir, normal) > 0 else hit - normal * 1e-3
+
+        # Check if the point is in shadow
+        shadow_hit, shadow_normal, shadow_material, _ = scene_intersect(shadow_orig, light_dir, spheres)
+
+        if shadow_hit is not None and glm.length(shadow_hit - shadow_orig) < light_distance:
+            continue  # Skip this light if the point is in shadow
+
+        diffuse_intensity += light.intensity * max(0, glm.dot(normal, light_dir))
+
+        reflection = reflect(-light_dir, normal)
+        specular_light_intensity += (
+            pow(max(0, glm.dot(reflection, -dir)), material.specular_exponent) * light.intensity
+        )
 
     return (
-    color * diffuse_intensity * material.albedo.x +  # Use the diffuse component of albedo
-    glm.vec3(1, 1, 1) * specular_light_intensity * material.albedo.y  # Use the specular component of albedo
-)
+        color * diffuse_intensity * material.albedo.x +
+        glm.vec3(1, 1, 1) * specular_light_intensity * material.albedo.y
+    )
 
 
 
@@ -130,14 +143,14 @@ def render(width=1024, height=768, output_file="output.png"):
     red_rubber = Material(glm.vec2(0.9, 0.1), glm.vec3(0.3, 0.1, 0.1), 10)
 
     spheres = [
-    Sphere(glm.vec3(-3, 0, -16), 2, ivory),
-    Sphere(glm.vec3(-1.0, -1.5, -12), 2, red_rubber),
-    Sphere(glm.vec3(1.5, -0.5, -18), 3, red_rubber),
-    Sphere(glm.vec3(7, 5, -18), 4, ivory)
+    Sphere(glm.vec3(-4, 0, -16), 2, ivory),
+    Sphere(glm.vec3(-2.0, -1.5, -12), 2, red_rubber),
+    Sphere(glm.vec3(0.5, -0.5, -18), 3, red_rubber),
+    Sphere(glm.vec3(6, 5, -18), 4, ivory)
 ]
 
 
-    light = Light(glm.vec3(20, 20, 20), 1.5)
+    light = Light(glm.vec3(-20, 20, 20), 1.5)
     light2 = Light(glm.vec3(30, 50, -25), 1.8)
     light3 = Light(glm.vec3(30, 20, 30), 1.7)
 
@@ -148,7 +161,7 @@ def render(width=1024, height=768, output_file="output.png"):
     img = create_image_from_colors(framebuffer)
     save_image(img, output_file)
 
-
-
 if __name__ == "__main__":
+    width = 1920
+    heigt = 1080
     render(width=1024, height=768, output_file="output.png")
