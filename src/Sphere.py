@@ -6,8 +6,10 @@ class Light:
         self.intensity = intensity
 
 class Material:
-    def __init__(self, material = None):
-        self.diffuse_color = material
+    def __init__(self, albedo: glm.vec2, color: glm.vec3, spec: float):
+        self.albedo = albedo
+        self.diffuse_color = color
+        self.specular_exponent = spec
 
 class Sphere:
     def __init__(self, c: glm.vec3, r: float, material: Material):

@@ -4,6 +4,9 @@ import math
 import sys
 from Sphere import Sphere, Material, Light
 
+def reflect(I, N):
+    return I - N * 2.0 * (I * N)
+
 def scene_intersect(orig, dir, spheres):
     closest_dist = sys.float_info.max
     hit = None
@@ -32,12 +35,20 @@ def cast_ray(orig, dir, spheres, lights):
         return glm.vec3(0.2, 0.7, 0.8)
 
     diffuse_intensity = 0
+    specular_light_intensity = 0
 
     for light in lights:
         light_dir = glm.normalize(light.position - hit)
         diffuse_intensity += light.intensity * max(0, glm.dot(normal, light_dir))
+        
+        reflection = reflect(-light_dir, normal)
+        specular_light_intensity += pow(max(0, glm.dot(reflection, -dir)), material.specular_exponent) * light.intensity
 
-    return color * diffuse_intensity
+
+    return (
+    color * diffuse_intensity * material.albedo.x +  # Use the diffuse component of albedo
+    glm.vec3(1, 1, 1) * specular_light_intensity * material.albedo.y  # Use the specular component of albedo
+)
 
 
 
@@ -115,16 +126,23 @@ def render(width=1024, height=768, output_file="output.png"):
     - output_file: File path to save the output image.
     """
 
-    ivory = Material(glm.vec3(0.4, 0.4, 0.3))
-    red_rubber = Material(glm.vec3(0.3, 0.1, 0.1))
+    ivory = Material(glm.vec2(0.6, 0.3), glm.vec3(0.4, 0.4, 0.3), 50)
+    red_rubber = Material(glm.vec2(0.9, 0.1), glm.vec3(0.3, 0.1, 0.1), 10)
 
-    sphere = Sphere(glm.vec3(-3, 0, -5), 2, red_rubber)
-    sphere2 = Sphere(glm.vec3(3, 0, -6), 2, ivory)
+    spheres = [
+    Sphere(glm.vec3(-3, 0, -16), 2, ivory),
+    Sphere(glm.vec3(-1.0, -1.5, -12), 2, red_rubber),
+    Sphere(glm.vec3(1.5, -0.5, -18), 3, red_rubber),
+    Sphere(glm.vec3(7, 5, -18), 4, ivory)
+]
 
-    spheres = [sphere, sphere2]
 
-    light = Light(glm.vec3(-20, 20, 20), 1.5)
-    lights = [light]
+    light = Light(glm.vec3(20, 20, 20), 1.5)
+    light2 = Light(glm.vec3(30, 50, -25), 1.8)
+    light3 = Light(glm.vec3(30, 20, 30), 1.7)
+
+    lights = [light, light2, light3]
+    #lights = [light]
 
     framebuffer = generate_colors(width, height, spheres, lights)
     img = create_image_from_colors(framebuffer)
