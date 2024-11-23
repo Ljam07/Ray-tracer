@@ -1,38 +1,88 @@
 import glm
 from PIL import Image
-from Sphere import Sphere  # Import the Sphere class correctly
+import math
+import sys
+from Sphere import Sphere, Material, Light
 
-def cast_ray(orig: glm.vec3, dir: glm.vec3, sphere: Sphere):
-    t0 = sphere.ray_intersect(orig, dir)
-    if t0 is None:
-        return glm.vec3(0.2, 0.7, 0.8)  # Background color (sky-blue)
-    return glm.vec3(0.4, 0.4, 0.3)  # Color of the sphere
+def scene_intersect(orig, dir, spheres):
+    closest_dist = sys.float_info.max
+    hit = None
+    normal = None
+    material = None
+    color = glm.vec3(0.2, 0.7, 0.8)
 
-def generate_colors(width, height, sphere: Sphere):
-    fov = 90  # Field of view
-    framebuffer = []
+    for sphere in spheres:
+        t0 = sphere.ray_intersect(orig, dir)
+        
+        if t0 is not None and t0 < closest_dist:
+            closest_dist = t0
+            hit = orig + dir * t0
+            normal = glm.normalize(hit - sphere.center)
+            material = sphere.material
+            color = material.diffuse_color
     
+    return hit, normal, material, color
+
+
+
+def cast_ray(orig, dir, spheres, lights):
+    hit, normal, material, color = scene_intersect(orig, dir, spheres)
+
+    if hit is None:
+        return glm.vec3(0.2, 0.7, 0.8)
+
+    diffuse_intensity = 0
+
+    for light in lights:
+        light_dir = glm.normalize(light.position - hit)
+        diffuse_intensity += light.intensity * max(0, glm.dot(normal, light_dir))
+
+    return color * diffuse_intensity
+
+
+
+def generate_colors(width, height, spheres, lights):
+    """
+    Generate a framebuffer of colors using glm.vec3.
+    Each pixel's color is a gradient based on its position.
+
+    Args:
+    - width: Width of the image.
+    - height: Height of the image.
+
+    Returns:
+    - A 2D list of glm.vec3 representing the image's colors.
+    """
+    fov = math.pi/2
+    framebuffer = []
     for j in range(height):
         row = []
         for i in range(width):
-            x = (2 * (i + 0.5) / float(width) - 1) * glm.tan(fov / 2) * width / float(height)
-            y = -(2 * (j + 0.5) / float(height) - 1) * glm.tan(fov / 2)
-            dir = glm.normalize(glm.vec3(x, y, -1))  # Ray direction
-            
-            color = cast_ray(glm.vec3(0, 0, 0), dir, sphere)
+            # Gradient from top (red) to bottom (green), no blue.
+            x = (2*(i+0.5)/float(width) - 1) * glm.tan(fov/2.0) * width / float(height)
+            y = -(2*(j + 0.5)/float(height) - 1)*glm.tan(fov/2)
+            dir = glm.normalize(glm.vec3(x, y, -1))
+            color = cast_ray(glm.vec3(0, 0, 0), dir, spheres, lights)
             row.append(color)
         framebuffer.append(row)
-        if round((j / height) * 100) % 10 == 0:
-            print(f"{round((j / height) * 100)}% done")
-
-    
     return framebuffer
 
+
 def create_image_from_colors(framebuffer):
+    """
+    Convert the framebuffer (2D list of glm.vec3 colors) into a Pillow Image object.
+
+    Args:
+    - framebuffer: 2D list of glm.vec3 objects containing color data.
+
+    Returns:
+    - A Pillow Image object.
+    """
     height = len(framebuffer)
     width = len(framebuffer[0])
     img = Image.new("RGB", (width, height))
 
+    # Convert framebuffer colors to RGB and set pixels in the image
     for j in range(height):
         for i in range(width):
             r = int(255 * glm.clamp(framebuffer[j][i].x, 0.0, 1.0))
@@ -42,16 +92,45 @@ def create_image_from_colors(framebuffer):
 
     return img
 
+
 def save_image(img, file_path):
+    """
+    Save the Pillow Image object to a file.
+
+    Args:
+    - img: The Pillow Image object to save.
+    - file_path: The path (including filename and extension) where the image should be saved.
+    """
     img.save(file_path)
     print(f"Image saved to {file_path}")
 
+
 def render(width=1024, height=768, output_file="output.png"):
-    # Create the sphere object correctly
-    sphere = Sphere(glm.vec3(-3, 0, -16), 2)  # Sphere at position (-3, 0, -16) with radius 2
-    framebuffer = generate_colors(width, height, sphere)
+    """
+    Main render function that generates an image and saves it.
+
+    Args:
+    - width: Width of the output image.
+    - height: Height of the output image.
+    - output_file: File path to save the output image.
+    """
+
+    ivory = Material(glm.vec3(0.4, 0.4, 0.3))
+    red_rubber = Material(glm.vec3(0.3, 0.1, 0.1))
+
+    sphere = Sphere(glm.vec3(-3, 0, -5), 2, red_rubber)
+    sphere2 = Sphere(glm.vec3(3, 0, -6), 2, ivory)
+
+    spheres = [sphere, sphere2]
+
+    light = Light(glm.vec3(-20, 20, 20), 1.5)
+    lights = [light]
+
+    framebuffer = generate_colors(width, height, spheres, lights)
     img = create_image_from_colors(framebuffer)
     save_image(img, output_file)
+
+
 
 if __name__ == "__main__":
     render(width=1024, height=768, output_file="output.png")

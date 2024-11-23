@@ -1,9 +1,19 @@
 import glm
 
+class Light:
+    def __init__(self, pos, intensity):
+        self.position = pos
+        self.intensity = intensity
+
+class Material:
+    def __init__(self, material = None):
+        self.diffuse_color = material
+
 class Sphere:
-    def __init__(self, c: glm.vec3, r: float):
+    def __init__(self, c: glm.vec3, r: float, material: Material):
         self.center = c
         self.radius = r
+        self.material = material
 
     def ray_intersect(self, orig: glm.vec3, dir: glm.vec3):
         """
