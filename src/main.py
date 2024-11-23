@@ -5,7 +5,17 @@ import sys
 from Sphere import Sphere, Material, Light
 
 def reflect(I, N):
-    return I - N * 2.0 * (I * N)
+    # Normalize the input vectors to avoid issues with zero-length vectors
+    I = glm.normalize(I)
+    N = glm.normalize(N)
+    
+    # Handle edge case where dot product is negative or zero
+    dot_product = glm.dot(I, N)
+    if abs(dot_product) < 1e-6:  # Very small values close to zero
+        return I  # If nearly perpendicular, return the incident vector (no reflection)
+    
+    return I - N * 2.0 * dot_product
+
 
 def scene_intersect(orig, dir, spheres):
     closest_dist = sys.float_info.max
@@ -28,40 +38,59 @@ def scene_intersect(orig, dir, spheres):
 
 
 
-def cast_ray(orig, dir, spheres, lights):
-    # Find intersection with the scene
-    hit, normal, material, color = scene_intersect(orig, dir, spheres)
+def cast_ray(orig, dir, spheres, lights, depth=0):
+    if depth > 4:
+        # Maximum recursion depth to prevent infinite reflection
+        return glm.vec3(0.2, 0.7, 0.8)  # Background colour
 
-    if hit is None:  # No intersection, return background colour
-        return glm.vec3(0.2, 0.7, 0.8)
+    # Check for intersection with the scene
+    hit, normal, material, _ = scene_intersect(orig, dir, spheres)
+    
+    if hit is None:
+        return glm.vec3(0.2, 0.7, 0.8)  # Background colour if no hit
 
-    diffuse_intensity = 0
-    specular_light_intensity = 0
+
+    # Reflection handling
+    reflect_dir = glm.normalize(reflect(dir, normal))
+    if glm.dot(reflect_dir, normal) < 0:
+        print("Warning: Reflection direction invalid!")
+
+    reflect_orig = hit + normal * 1e-3 if glm.dot(reflect_dir, normal) > 0 else hit - normal * 1e-3
+    reflect_color = cast_ray(reflect_orig, reflect_dir, spheres, lights, depth + 1)
+
+    # Lighting calculations
+    diffuse_light_intensity = 0.0
+    specular_light_intensity = 0.0
 
     for light in lights:
-        light_dir = glm.normalize(light.position - hit)  
-        light_distance = glm.length(light.position - hit) 
+        light_dir = glm.normalize(light.position - hit)
+        light_distance = glm.length(light.position - hit)
 
-        # Calculate shadow ray origin, slightly offset to prevent self-shadowing
+        # Shadow ray
         shadow_orig = hit + normal * 1e-3 if glm.dot(light_dir, normal) > 0 else hit - normal * 1e-3
-
-        # Check if the point is in shadow
-        shadow_hit, shadow_normal, shadow_material, _ = scene_intersect(shadow_orig, light_dir, spheres)
-
+        shadow_hit, _, _, _ = scene_intersect(shadow_orig, light_dir, spheres)
+        
+        # Check if the shadow point is closer than the light source
         if shadow_hit is not None and glm.length(shadow_hit - shadow_orig) < light_distance:
-            continue  # Skip this light if the point is in shadow
+            continue  # Point is in shadow, skip light contribution
 
-        diffuse_intensity += light.intensity * max(0, glm.dot(normal, light_dir))
+        # Diffuse component (Lambertian reflection)
+        diffuse_light_intensity += light.intensity * max(0.0, glm.dot(light_dir, normal))
 
-        reflection = reflect(-light_dir, normal)
+        # Specular component (Blinn-Phong reflection)
+        halfway_dir = glm.normalize(light_dir - dir)  # Halfway vector
         specular_light_intensity += (
-            pow(max(0, glm.dot(reflection, -dir)), material.specular_exponent) * light.intensity
+            pow(max(0.0, glm.dot(halfway_dir, normal)), material.specular_exponent) * light.intensity
         )
 
-    return (
-        color * diffuse_intensity * material.albedo.x +
-        glm.vec3(1, 1, 1) * specular_light_intensity * material.albedo.y
+    # Final colour calculation
+    colour = (
+        material.diffuse_color * diffuse_light_intensity * material.albedo.x +  # Diffuse
+        glm.vec3(1, 1, 1) * specular_light_intensity * material.albedo.y +     # Specular
+        reflect_color * material.albedo.z                                    # Reflection
     )
+    return glm.clamp(colour, 0.0, 1.0)  # Ensure the colour is within valid range
+
 
 
 
@@ -139,14 +168,16 @@ def render(width=1024, height=768, output_file="output.png"):
     - output_file: File path to save the output image.
     """
 
-    ivory = Material(glm.vec2(0.6, 0.3), glm.vec3(0.4, 0.4, 0.3), 50)
-    red_rubber = Material(glm.vec2(0.9, 0.1), glm.vec3(0.3, 0.1, 0.1), 10)
+    ivory = Material(glm.vec3(0.6, 0.3, 0.1), glm.vec3(0.4, 0.4, 0.3), 50)  # Slightly reflective
+    red_rubber = Material(glm.vec3(0.9, 0.1, 0.0), glm.vec3(0.3, 0.1, 0.1), 10)  # Matte
+    mirror = Material(glm.vec3(0.0, 10.0, 0.9), glm.vec3(1.0, 1.0, 1.0), 1000)  # Highly reflective
+
 
     spheres = [
-    Sphere(glm.vec3(-4, 0, -16), 2, ivory),
-    Sphere(glm.vec3(-2.0, -1.5, -12), 2, red_rubber),
-    Sphere(glm.vec3(0.5, -0.5, -18), 3, red_rubber),
-    Sphere(glm.vec3(6, 5, -18), 4, ivory)
+    Sphere(glm.vec3(-3, 0, -16), 2, ivory),
+    Sphere(glm.vec3(-1.0, -1.5, -12), 2, mirror),
+    Sphere(glm.vec3(1.5, -0.5, -18), 3, red_rubber),
+    Sphere(glm.vec3(7, 5, -18), 4, mirror)
 ]
 
 
