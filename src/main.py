@@ -4,6 +4,37 @@ import math
 import sys
 from Sphere import Sphere, Material, Light
 
+def refract(I: glm.vec3, N: glm.vec3, RI: float) -> glm.vec3:
+    # Ensure input vectors are normalized
+    I = glm.normalize(I)
+    N = glm.normalize(N)
+
+    # Compute the cosine of the angle of incidence
+    cosi = max(-1.0, min(1.0, glm.dot(I, N)))
+    etai = 1.0
+    etat = RI
+    n = N
+
+    # Adjust the normal and indices of refraction based on the incident direction
+    if cosi < 0:
+        cosi = -cosi
+    else:
+        etai, etat = etat, etai
+        n = -N
+
+    eta = etai / etat
+    k = 1.0 - eta * eta * (1.0 - cosi * cosi)
+
+    # Handle total internal reflection
+    if k < 0.0:
+        return glm.vec3(0.0, 0.0, 0.0)  # Total internal reflection, no refraction
+
+    # Compute the refracted direction
+    refracted_dir = eta * I + (eta * cosi - glm.sqrt(k)) * n
+    return glm.normalize(refracted_dir)
+
+
+
 def reflect(I, N):
     # Normalize the input vectors to avoid issues with zero-length vectors
     I = glm.normalize(I)
@@ -52,11 +83,14 @@ def cast_ray(orig, dir, spheres, lights, depth=0):
 
     # Reflection handling
     reflect_dir = glm.normalize(reflect(dir, normal))
-    if glm.dot(reflect_dir, normal) < 0:
-        print("Warning: Reflection direction invalid!")
+    refract_dir = glm.normalize(refract(dir, normal, material.refractive_index))
+    # if glm.dot(reflect_dir, normal) < 0:
+    #     print("Warning: Reflection direction invalid!")
 
     reflect_orig = hit + normal * 1e-3 if glm.dot(reflect_dir, normal) > 0 else hit - normal * 1e-3
+    refract_orig = hit + normal * 1e-3 if glm.dot(refract_dir, normal) > 0 else hit - normal * 1e-3
     reflect_color = cast_ray(reflect_orig, reflect_dir, spheres, lights, depth + 1)
+    refract_color = cast_ray(refract_orig, refract_dir, spheres, lights, depth + 1)
 
     # Lighting calculations
     diffuse_light_intensity = 0.0
@@ -87,7 +121,7 @@ def cast_ray(orig, dir, spheres, lights, depth=0):
     colour = (
         material.diffuse_color * diffuse_light_intensity * material.albedo.x +  # Diffuse
         glm.vec3(1, 1, 1) * specular_light_intensity * material.albedo.y +     # Specular
-        reflect_color * material.albedo.z                                    # Reflection
+        reflect_color * material.albedo.z + refract_color*material.albedo.w    # Reflection
     )
     return glm.clamp(colour, 0.0, 1.0)  # Ensure the colour is within valid range
 
@@ -168,14 +202,15 @@ def render(width=1024, height=768, output_file="output.png"):
     - output_file: File path to save the output image.
     """
 
-    ivory = Material(glm.vec3(0.6, 0.3, 0.1), glm.vec3(0.4, 0.4, 0.3), 50)  # Slightly reflective
-    red_rubber = Material(glm.vec3(0.9, 0.1, 0.0), glm.vec3(0.3, 0.1, 0.1), 10)  # Matte
-    mirror = Material(glm.vec3(0.0, 10.0, 0.9), glm.vec3(1.0, 1.0, 1.0), 1000)  # Highly reflective
+    ivory = Material(1.0, glm.vec4(0.6, 0.3, 0.1, 0.0), glm.vec3(0.4, 0.4, 0.3), 50)  
+    glass = Material(1.5, glm.vec4(0.0, 0.5, 0.1, 0.8), glm.vec3(0.6, 0.7, 0.8), 125)  
+    red_rubber = Material(1.0, glm.vec4(0.9, 0.1, 0.0, 0.0), glm.vec3(0.3, 0.1, 0.1), 10)
+    mirror = Material(1.0, glm.vec4(0.0, 10.0, 0.8, 0.0), glm.vec3(1.0, 1.0, 1.0), 1425) 
 
 
     spheres = [
     Sphere(glm.vec3(-3, 0, -16), 2, ivory),
-    Sphere(glm.vec3(-1.0, -1.5, -12), 2, mirror),
+    Sphere(glm.vec3(-1.0, -1.5, -12), 2, glass),
     Sphere(glm.vec3(1.5, -0.5, -18), 3, red_rubber),
     Sphere(glm.vec3(7, 5, -18), 4, mirror)
 ]
