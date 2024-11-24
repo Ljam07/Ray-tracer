@@ -50,6 +50,7 @@ def reflect(I, N):
 
 def scene_intersect(orig, dir, spheres):
     closest_dist = sys.float_info.max
+    checkerboard_dist = sys.float_info.max
     hit = None
     normal = None
     material = None
@@ -64,6 +65,18 @@ def scene_intersect(orig, dir, spheres):
             normal = glm.normalize(hit - sphere.center)
             material = sphere.material
             color = material.diffuse_color
+
+    if abs(dir.y) > 1e-3:
+        d = -(orig.y + 4) / dir.y
+        pt = orig + dir * d
+        if d > 0 and abs(pt.x) < 10 and -30 < pt.z < -10 and d < closest_dist:
+            checkerboard_dist = d
+            hit = pt
+            normal = glm.vec3(0, 1, 0)
+            color = glm.vec3(0.3, 0.3, 0.3) if ((int(0.5 * hit.x + 1000) + int(0.5 * hit.z)) & 1) else glm.vec3(0.3, 0.2, 0.1)
+            material = Material(1.0, glm.vec4(0.9, 0.1, 0.0, 0.0), color, 10)  # Temporary material for the checkerboard
+
+
     
     return hit, normal, material, color
 
@@ -229,5 +242,5 @@ def render(width=1024, height=768, output_file="output.png"):
 
 if __name__ == "__main__":
     width = 1920
-    heigt = 1080
+    height = 1080
     render(width=1024, height=768, output_file="output.png")
